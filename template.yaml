@@ -1,0 +1,258 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: AWS WAF Managed Rules Update Notification Pipeline using EventBridge Pipes
+
+Parameters:
+  WafSnsTopicArn:
+    Type: String
+    Description: ARN of the AWS WAF Managed Rules SNS Topic
+    Default: arn:aws:sns:us-east-1:247893642050:aws-managed-rules-deploy-notifications
+
+  ChatbotWorkspaceId:
+    Type: String
+    Description: Slack Workspace ID for AWS Chatbot (optional - leave empty if not using Slack)
+    Default: ''
+
+  ChatbotChannelId:
+    Type: String
+    Description: Slack Channel ID for AWS Chatbot (optional - leave empty if not using Slack)
+    Default: ''
+
+  NotificationEmail:
+    Type: String
+    Description: Email address for notifications (optional - leave empty if not using email)
+    Default: ''
+
+Conditions:
+  HasSlackConfiguration: !And
+    - !Not [!Equals [!Ref ChatbotWorkspaceId, '']]
+    - !Not [!Equals [!Ref ChatbotChannelId, '']]
+  HasEmailConfiguration: !Not [!Equals [!Ref NotificationEmail, '']]
+
+Resources:
+  # Dead Letter Queue for failed messages
+  WafNotificationDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${AWS::StackName}-waf-notifications-dlq
+      MessageRetentionPeriod: 1209600  # 14 days
+      Tags:
+        - Key: Purpose
+          Value: WAF-Managed-Rules-Notifications
+        - Key: Type
+          Value: DeadLetterQueue
+
+  # Main SQS Queue to receive SNS messages
+  WafNotificationQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub ${AWS::StackName}-waf-notifications
+      VisibilityTimeout: 30
+      MessageRetentionPeriod: 86400  # 1 day
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt WafNotificationDLQ.Arn
+        maxReceiveCount: 3
+      Tags:
+        - Key: Purpose
+          Value: WAF-Managed-Rules-Notifications
+        - Key: Type
+          Value: MainQueue
+
+  # SQS Queue Policy to allow SNS to send messages
+  WafQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref WafNotificationQueue
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowSNSPublish
+            Effect: Allow
+            Principal:
+              Service: sns.amazonaws.com
+            Action:
+              - sqs:SendMessage
+            Resource: !GetAtt WafNotificationQueue.Arn
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Ref WafSnsTopicArn
+
+  # SNS Subscription to connect WAF SNS Topic to SQS Queue
+  WafSnsSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref WafSnsTopicArn
+      Protocol: sqs
+      Endpoint: !GetAtt WafNotificationQueue.Arn
+      RawMessageDelivery: false  # Keep SNS metadata for MessageAttributes
+
+  # SNS Topic for Chatbot
+  ChatbotSnsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub ${AWS::StackName}-chatbot-notifications
+      DisplayName: AWS WAF Managed Rules Updates for Chatbot
+      Tags:
+        - Key: Purpose
+          Value: WAF-Managed-Rules-Notifications
+        - Key: Type
+          Value: ChatbotTopic
+
+  # Email Subscription (optional)
+  EmailSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasEmailConfiguration
+    Properties:
+      TopicArn: !Ref ChatbotSnsTopic
+      Protocol: email
+      Endpoint: !Ref NotificationEmail
+
+  # IAM Role for EventBridge Pipe
+  PipeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${AWS::StackName}-pipe-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: pipes.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+      Policies:
+        - PolicyName: PipeSourceTargetPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Permissions for SQS (Source)
+              - Sid: SQSSourcePermissions
+                Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource: !GetAtt WafNotificationQueue.Arn
+              # Permissions for SNS (Target)
+              - Sid: SNSTargetPermissions
+                Effect: Allow
+                Action:
+                  - sns:Publish
+                Resource: !Ref ChatbotSnsTopic
+      Tags:
+        - Key: Purpose
+          Value: WAF-Managed-Rules-Notifications
+        - Key: Type
+          Value: PipeRole
+
+  # CloudWatch Log Group for Pipe logs
+  PipeLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/vendedlogs/pipes/${AWS::StackName}-waf-notification-pipe
+      RetentionInDays: 7
+      KmsKeyId: !Ref AWS::NoValue
+
+  # EventBridge Pipe to transform messages
+  WafNotificationPipe:
+    Type: AWS::Pipes::Pipe
+    Properties:
+      Name: !Sub ${AWS::StackName}-waf-notification-pipe
+      Description: Transform WAF Managed Rules notifications for AWS Chatbot
+      RoleArn: !GetAtt PipeRole.Arn
+
+      # Source configuration
+      Source: !GetAtt WafNotificationQueue.Arn
+      SourceParameters:
+        SqsQueueParameters:
+          BatchSize: 1
+          MaximumBatchingWindowInSeconds: 0
+
+      # Target configuration
+      Target: !Ref ChatbotSnsTopic
+      TargetParameters:
+        InputTemplate: |
+          {
+            "version": "1.0",
+            "source": "custom",
+            "content": {
+              "title": ":shield: AWS WAF Managed Rules Update",
+              "description": ":information_source: **<$.Subject>**\n\n:package: **Rule Group:** <$.MessageAttributes.managed_rule_group.Value>\n:label: **Version:** <$.MessageAttributes.major_version.Value>\n\n:memo: **Details:**\n<$.Message>\n\n:clock1: **Timestamp:** <$.Timestamp>"
+            }
+          }
+
+      # Logging configuration
+      LogConfiguration:
+        CloudwatchLogsLogDestination:
+          LogGroupArn: !GetAtt PipeLogGroup.Arn
+        Level: ERROR
+
+      Tags:
+        Purpose: WAF-Managed-Rules-Notifications
+        Type: Pipe
+
+  # AWS Chatbot Slack Configuration (optional)
+  ChatbotSlackChannel:
+    Type: AWS::Chatbot::SlackChannelConfiguration
+    Condition: HasSlackConfiguration
+    Properties:
+      ConfigurationName: !Sub ${AWS::StackName}-waf-notifications
+      IamRoleArn: !GetAtt ChatbotRole.Arn
+      LoggingLevel: ERROR
+      SlackChannelId: !Ref ChatbotChannelId
+      SlackWorkspaceId: !Ref ChatbotWorkspaceId
+      SnsTopicArns:
+        - !Ref ChatbotSnsTopic
+
+  # IAM Role for AWS Chatbot
+  ChatbotRole:
+    Type: AWS::IAM::Role
+    Condition: HasSlackConfiguration
+    Properties:
+      RoleName: !Sub ${AWS::StackName}-chatbot-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: chatbot.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/CloudWatchReadOnlyAccess
+      Tags:
+        - Key: Purpose
+          Value: WAF-Managed-Rules-Notifications
+        - Key: Type
+          Value: ChatbotRole
+
+Outputs:
+  QueueUrl:
+    Description: URL of the SQS Queue receiving WAF notifications
+    Value: !Ref WafNotificationQueue
+    Export:
+      Name: !Sub ${AWS::StackName}-QueueUrl
+
+  DeadLetterQueueUrl:
+    Description: URL of the Dead Letter Queue
+    Value: !Ref WafNotificationDLQ
+    Export:
+      Name: !Sub ${AWS::StackName}-DLQUrl
+
+  ChatbotTopicArn:
+    Description: ARN of the SNS Topic for Chatbot
+    Value: !Ref ChatbotSnsTopic
+    Export:
+      Name: !Sub ${AWS::StackName}-ChatbotTopicArn
+
+  PipeArn:
+    Description: ARN of the EventBridge Pipe
+    Value: !GetAtt WafNotificationPipe.Arn
+    Export:
+      Name: !Sub ${AWS::StackName}-PipeArn
+
+  PipeLogGroup:
+    Description: CloudWatch Log Group for Pipe logs
+    Value: !Ref PipeLogGroup
+    Export:
+      Name: !Sub ${AWS::StackName}-PipeLogGroup
