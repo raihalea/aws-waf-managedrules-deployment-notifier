@@ -1,0 +1,27 @@
+# CloudFormation outputs
+*.stackoutputs
+
+# Temporary files
+*.tmp
+/tmp/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# AWS credentials
+.aws/
+credentials
+
+# Parameters with sensitive data (if needed, uncomment)
+# parameters.json
+
+# Logs
+*.log

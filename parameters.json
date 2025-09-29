@@ -2,7 +2,7 @@
   "Parameters": [
     {
       "ParameterKey": "WafSnsTopicArn",
-      "ParameterValue": "arn:aws:sns:us-east-1:247893642050:aws-managed-rules-deploy-notifications"
+      "ParameterValue": "arn:aws:sns:us-east-1:248400274283:aws-managed-waf-rule-notifications"
     },
     {
       "ParameterKey": "ChatbotWorkspaceId",
@@ -10,10 +10,6 @@
     },
     {
       "ParameterKey": "ChatbotChannelId",
-      "ParameterValue": ""
-    },
-    {
-      "ParameterKey": "NotificationEmail",
       "ParameterValue": ""
     }
   ]

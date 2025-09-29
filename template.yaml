@@ -5,7 +5,7 @@ Parameters:
   WafSnsTopicArn:
     Type: String
     Description: ARN of the AWS WAF Managed Rules SNS Topic
-    Default: arn:aws:sns:us-east-1:247893642050:aws-managed-rules-deploy-notifications
+    Default: arn:aws:sns:us-east-1:248400274283:aws-managed-waf-rule-notifications
 
   ChatbotWorkspaceId:
     Type: String
@@ -17,16 +17,10 @@ Parameters:
     Description: Slack Channel ID for AWS Chatbot (optional - leave empty if not using Slack)
     Default: ''
 
-  NotificationEmail:
-    Type: String
-    Description: Email address for notifications (optional - leave empty if not using email)
-    Default: ''
-
 Conditions:
   HasSlackConfiguration: !And
     - !Not [!Equals [!Ref ChatbotWorkspaceId, '']]
     - !Not [!Equals [!Ref ChatbotChannelId, '']]
-  HasEmailConfiguration: !Not [!Equals [!Ref NotificationEmail, '']]
 
 Resources:
   # Dead Letter Queue for failed messages
@@ -98,15 +92,6 @@ Resources:
         - Key: Type
           Value: ChatbotTopic
 
-  # Email Subscription (optional)
-  EmailSubscription:
-    Type: AWS::SNS::Subscription
-    Condition: HasEmailConfiguration
-    Properties:
-      TopicArn: !Ref ChatbotSnsTopic
-      Protocol: email
-      Endpoint: !Ref NotificationEmail
-
   # IAM Role for EventBridge Pipe
   PipeRole:
     Type: AWS::IAM::Role
@@ -177,8 +162,13 @@ Resources:
             "version": "1.0",
             "source": "custom",
             "content": {
+              "textType": "client-markdown",
               "title": ":shield: AWS WAF Managed Rules Update",
-              "description": ":information_source: **<$.Subject>**\n\n:package: **Rule Group:** <$.MessageAttributes.managed_rule_group.Value>\n:label: **Version:** <$.MessageAttributes.major_version.Value>\n\n:memo: **Details:**\n<$.Message>\n\n:clock1: **Timestamp:** <$.Timestamp>"
+              "description": ":information_source: *<$.body.Subject>*\n\n:package: *Rule Group:* <$.body.MessageAttributes.managed_rule_group.Value>\n:label: *Version:* <$.body.MessageAttributes.major_version.Value>\n\n:memo: *Details:*\n<$.body.Message>\n\n:clock1: *Timestamp:* <$.body.Timestamp>"            },
+            "metadata": {
+              "threadId": "waf-<$.body.MessageAttributes.managed_rule_group.Value>",
+              "summary": "AWS WAF Managed Rules Update for <$.body.MessageAttributes.managed_rule_group.Value>",
+              "eventType": "WAF_MANAGED_RULES_UPDATE"
             }
           }
 
