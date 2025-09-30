@@ -65,26 +65,24 @@ Currently, the AWS WAF Managed Rules update notification SNS topic is only avail
    If not configuring Slack, remove the relevant entries from Parameters. CloudFormation will skip creating the Slack connection settings.
 
    ```json
-   {
-     "Parameters": [
-       {
-         "ParameterKey": "WafSnsTopicArn",
-         "ParameterValue": "arn:aws:sns:us-east-1:248400274283:aws-managed-waf-rule-notifications"
-       },
-       {
-         "ParameterKey": "WafSnsTopicRegion",
-         "ParameterValue": "us-east-1"
-       },
-       {
-         "ParameterKey": "ChatbotWorkspaceId",
-         "ParameterValue": "YOUR_SLACK_WORKSPACE_ID"
-       },
-       {
-         "ParameterKey": "ChatbotChannelId",
-         "ParameterValue": "YOUR_SLACK_CHANNEL_ID"
-       }
-     ]
-   }
+    [
+      {
+        "ParameterKey": "WafSnsTopicArn",
+        "ParameterValue": "arn:aws:sns:us-east-1:248400274283:aws-managed-waf-rule-notifications"
+      },
+      {
+        "ParameterKey": "WafSnsTopicRegion",
+        "ParameterValue": "us-east-1"
+      },
+      {
+        "ParameterKey": "ChatbotWorkspaceId",
+        "ParameterValue": "YOUR_SLACK_WORKSPACE_ID"
+      },
+      {
+        "ParameterKey": "ChatbotChannelId",
+        "ParameterValue": "YOUR_SLACK_CHANNEL_ID"
+      }
+    ]
    ```
 
 3. **Deploy CloudFormation Stack**

@@ -65,26 +65,24 @@ AWS WAF Managed Rulesは定期的に更新され、新しい脅威への対応�
    Slackを設定しない場合、Parametersから該当の箇所削除してください。CloudFormationはSlackへの接続設定の作成をスキップします。
 
    ```json
-   {
-     "Parameters": [
-       {
-         "ParameterKey": "WafSnsTopicArn",
-         "ParameterValue": "arn:aws:sns:us-east-1:248400274283:aws-managed-waf-rule-notifications"
-       },
-       {
-         "ParameterKey": "WafSnsTopicRegion",
-         "ParameterValue": "us-east-1"
-       },
-       {
-         "ParameterKey": "ChatbotWorkspaceId",
-         "ParameterValue": "YOUR_SLACK_WORKSPACE_ID"
-       },
-       {
-         "ParameterKey": "ChatbotChannelId",
-         "ParameterValue": "YOUR_SLACK_CHANNEL_ID"
-       }
-     ]
-   }
+    [
+      {
+        "ParameterKey": "WafSnsTopicArn",
+        "ParameterValue": "arn:aws:sns:us-east-1:248400274283:aws-managed-waf-rule-notifications"
+      },
+      {
+        "ParameterKey": "WafSnsTopicRegion",
+        "ParameterValue": "us-east-1"
+      },
+      {
+        "ParameterKey": "ChatbotWorkspaceId",
+        "ParameterValue": "YOUR_SLACK_WORKSPACE_ID"
+      },
+      {
+        "ParameterKey": "ChatbotChannelId",
+        "ParameterValue": "YOUR_SLACK_CHANNEL_ID"
+      }
+    ]
    ```
 
 3. **CloudFormationスタックのデプロイ**
