@@ -7,6 +7,11 @@ Parameters:
     Description: ARN of the AWS WAF Managed Rules SNS Topic
     Default: arn:aws:sns:us-east-1:248400274283:aws-managed-waf-rule-notifications
 
+  WafSnsTopicRegion:
+    Type: String
+    Description: Region of the AWS WAF Managed Rules SNS Topic
+    Default: us-east-1
+
   ChatbotWorkspaceId:
     Type: String
     Description: Slack Workspace ID for AWS Chatbot (optional - leave empty if not using Slack)
@@ -26,6 +31,8 @@ Resources:
   # Dead Letter Queue for failed messages
   WafNotificationDLQ:
     Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
     Properties:
       QueueName: !Sub ${AWS::StackName}-waf-notifications-dlq
       MessageRetentionPeriod: 1209600  # 14 days
@@ -38,13 +45,15 @@ Resources:
   # Main SQS Queue to receive SNS messages
   WafNotificationQueue:
     Type: AWS::SQS::Queue
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
     Properties:
       QueueName: !Sub ${AWS::StackName}-waf-notifications
       VisibilityTimeout: 30
       MessageRetentionPeriod: 86400  # 1 day
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt WafNotificationDLQ.Arn
-        maxReceiveCount: 3
+        maxReceiveCount: 10
       Tags:
         - Key: Purpose
           Value: WAF-Managed-Rules-Notifications
@@ -76,6 +85,7 @@ Resources:
     Type: AWS::SNS::Subscription
     Properties:
       TopicArn: !Ref WafSnsTopicArn
+      Region: !Ref WafSnsTopicRegion
       Protocol: sqs
       Endpoint: !GetAtt WafNotificationQueue.Arn
       RawMessageDelivery: false  # Keep SNS metadata for MessageAttributes
@@ -134,9 +144,11 @@ Resources:
   # CloudWatch Log Group for Pipe logs
   PipeLogGroup:
     Type: AWS::Logs::LogGroup
+    DeletionPolicy: Delete
+    UpdateReplacePolicy: Delete
     Properties:
       LogGroupName: !Sub /aws/vendedlogs/pipes/${AWS::StackName}-waf-notification-pipe
-      RetentionInDays: 7
+      RetentionInDays: 30
       KmsKeyId: !Ref AWS::NoValue
 
   # EventBridge Pipe to transform messages
@@ -189,6 +201,8 @@ Resources:
     Properties:
       ConfigurationName: !Sub ${AWS::StackName}-waf-notifications
       IamRoleArn: !GetAtt ChatbotRole.Arn
+      GuardrailPolicies:
+        - arn:aws:iam::aws:policy/ReadOnlyAccess
       LoggingLevel: ERROR
       SlackChannelId: !Ref ChatbotChannelId
       SlackWorkspaceId: !Ref ChatbotWorkspaceId

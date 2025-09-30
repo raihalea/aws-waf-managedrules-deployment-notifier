@@ -1,59 +1,79 @@
 # AWS WAF Managed Rules Deployment Notifier
 
-AWS WAF Managed Rulesの更新通知をAWS Chatbot経由でSlack/Teamsに配信するためのCloudFormationテンプレート
+[日本語版はこちら / Japanese version](README.ja.md)
 
-## 概要
+CloudFormation template for delivering AWS WAF Managed Rules update notifications to Slack/Teams via AWS Chatbot
 
-このプロジェクトは、AWS WAF Managed Rulesの更新通知を受信し、AWS Chatbotを通じてSlackやTeamsなどのコラボレーションツールに通知を送信するサーバーレスソリューションです。EventBridge Pipesを使用してメッセージを変換し、コードメンテナンスが不要な構成を実現しています。
+## Overview
 
-AWS WAF Managed Rulesは定期的に更新され、新しい脅威への対応や誤検知の修正が行われます。このソリューションにより、これらの更新をリアルタイムで把握し、必要に応じて迅速に対応できます。
+This project provides a serverless solution that receives AWS WAF Managed Rules update notifications and delivers them to collaboration tools like Slack and Teams through AWS Chatbot. By using EventBridge Pipes for message transformation, it achieves a code-maintenance-free architecture.
 
-## アーキテクチャ
+AWS WAF Managed Rules are regularly updated with responses to new threats and fixes for false positives. This solution enables you to stay informed about these updates in real-time and respond quickly when necessary.
 
-```
-[AWS WAF SNS Topic] → [SQS Queue] → [EventBridge Pipes] → [SNS Topic] → [AWS Chatbot] → [Slack/Teams]
-```
+## Architecture
 
-### コンポーネント
+![Architecture Diagram](images/architecture-diagram.png.png)
 
-- **SQS Queue**: AWS WAF SNS Topicからのメッセージを受信
-- **EventBridge Pipes**: メッセージをChatbot形式に変換（ノーコード）
-- **SNS Topic**: 変換されたメッセージをChatbotに配信
-- **AWS Chatbot**: Slack/Teamsへの通知を管理
-- **Dead Letter Queue**: 失敗したメッセージの保管
+### Components
 
-## 特徴
+- **SQS Queue**: Receives messages from AWS WAF SNS Topic
+- **EventBridge Pipes**: Transforms messages into Chatbot format (no-code)
+- **SNS Topic**: Delivers transformed messages to Chatbot
+- **AWS Chatbot**: Manages notifications to Slack/Teams
+- **Dead Letter Queue**: Stores failed messages
 
-- 🚀 **完全サーバーレス**: Lambda関数不要
-- 🛠️ **メンテナンスフリー**: コード管理不要
-- 💰 **低コスト**: 月数回の更新なら実質無料
-- 🔄 **自動リトライ**: DLQ付きで信頼性向上
-- 📊 **カスタマイズ可能**: メッセージフォーマットを簡単に変更可能
+## Features
 
-## セットアップ
+- 🚀 **Fully Serverless**: No Lambda functions required
+- 🛠️ **Maintenance-Free**: No code management needed
+- 💰 **Low Cost**: Essentially free for a few updates per month
+- 🔄 **Automatic Retry**: Improved reliability with DLQ
+- 📊 **Customizable**: Easy to modify message format
+- 🎨 **Rich Formatting**: Slack markdown support, threading, and keyword search
 
-### 前提条件
+## Setup
 
-- AWS CLIがインストールされ、設定済みであること
-- AWS WAF Managed Rulesを使用していること
-- （オプション）Slackワークスペースまたは Microsoft Teams チャネル
+### Prerequisites
 
-### サポートリージョン
+- (Optional) If configuring a Slack workspace, complete workspace authentication and add the `Amazon Q Developer` app to the target channel.
+  https://docs.aws.amazon.com/chatbot/latest/adminguide/slack-setup.html#slack-client-setup
 
-AWS WAF Managed Rulesの更新通知SNSトピックは`us-east-1`リージョンでのみ利用可能です。ただし、このソリューションは他のリージョンにもデプロイ可能で、クロスリージョンでSNSサブスクリプションを作成します。
+### Supported Regions
 
-### デプロイ手順
+Currently, the AWS WAF Managed Rules update notification SNS topic is only available in the `us-east-1` region. However, this solution can be deployed to other regions and creates cross-region SNS subscriptions.
 
-1. **パラメータファイルの編集**
+### Deployment Steps
 
-   `parameters.json`を編集して、必要な設定を行います：
+1. **Get AWS WAF SNS Topic ARN**
+
+   Use the following command to retrieve the SNS topic ARN for AWS WAF Managed Rules update notifications:
+
+   ```bash
+   aws wafv2 describe-managed-rule-group --scope REGIONAL --vendor-name AWS --name AWSManagedRulesCommonRuleSet --region us-east-1 --query 'SnsTopicArn' --output text
+   ```
+
+   Or for CloudFront scope:
+
+   ```bash
+   aws wafv2 describe-managed-rule-group --scope CLOUDFRONT --vendor-name AWS --name AWSManagedRulesCommonRuleSet --region us-east-1 --query 'SnsTopicArn' --output text
+   ```
+
+2. **Edit Parameters File**
+
+   Edit `parameters.json` to configure the necessary settings.
+   Set the ARN obtained in Step 1 to `WafSnsTopicArn` and the region of the `WafSnsTopicArn` to `WafSnsTopicRegion`. The default values should work unless AWS changes the topic ARN.
+   If not configuring Slack, remove the relevant entries from Parameters. CloudFormation will skip creating the Slack connection settings.
 
    ```json
    {
      "Parameters": [
        {
          "ParameterKey": "WafSnsTopicArn",
-         "ParameterValue": "arn:aws:sns:us-east-1:247893642050:aws-managed-rules-deploy-notifications"
+         "ParameterValue": "arn:aws:sns:us-east-1:248400274283:aws-managed-waf-rule-notifications"
+       },
+       {
+         "ParameterKey": "WafSnsTopicRegion",
+         "ParameterValue": "us-east-1"
        },
        {
          "ParameterKey": "ChatbotWorkspaceId",
@@ -62,35 +82,26 @@ AWS WAF Managed Rulesの更新通知SNSトピックは`us-east-1`リージョン
        {
          "ParameterKey": "ChatbotChannelId",
          "ParameterValue": "YOUR_SLACK_CHANNEL_ID"
-       },
-       {
-         "ParameterKey": "NotificationEmail",
-         "ParameterValue": "your-email@example.com"
        }
      ]
    }
    ```
 
-2. **CloudFormationスタックのデプロイ**
+3. **Deploy CloudFormation Stack**
+
+   You can choose any stack name and deployment region.
 
    ```bash
    aws cloudformation create-stack \
      --stack-name waf-managed-rules-notifier \
      --template-body file://template.yaml \
      --parameters file://parameters.json \
-     --capabilities CAPABILITY_NAMED_IAM \
-     --region us-east-1
+     --capabilities CAPABILITY_NAMED_IAM
    ```
 
-3. **AWS Chatbotの設定（Slack/Teams使用時）**
+## Notification Format
 
-   - [AWS Chatbotコンソール](https://console.aws.amazon.com/chatbot/)にアクセス
-   - Slack WorkspaceまたはTeamsチャネルを設定
-   - 作成されたSNS TopicをChatbot設定に追加
-
-## 通知フォーマット
-
-通知は以下の形式で配信されます：
+Notifications are delivered in the following format:
 
 ```
 🛡️ AWS WAF Managed Rules Update
@@ -98,30 +109,20 @@ AWS WAF Managed Rulesの更新通知SNSトピックは`us-east-1`リージョン
 ℹ️ New version available for rule group AWSManagedRulesCommonRuleSet
 
 📦 Rule Group: AWSManagedRulesCommonRuleSet
-🏷️ Version: v1.5
+🏷️ Version: v2
 
 📝 Details:
-Welcome to AWSManagedRulesCommonRuleSet version 1.5! We've updated the regex
-specification in this version to improve protection coverage, adding protections
-against insecure deserialization. For details about this change, see
-http://updatedPublicDocs.html.
+Welcome to AWSManagedRulesCommonRuleSet version 2.5! This update includes
+improved protection against SQL injection and XSS attacks.
 
-🕐 Timestamp: 2021-08-24T11:12:19.810Z
+🕐 Timestamp: 2025-09-30T10:00:00.000Z
 ```
 
-### 通知に含まれる情報
-
-- **Subject**: 更新の概要（どのルールグループが更新されたか）
-- **Rule Group**: 更新されたルールグループ名
-- **Version**: 新しいメジャーバージョン番号
-- **Details**: 更新内容の詳細説明とドキュメントリンク
-- **Timestamp**: 更新通知の送信時刻
-
-## モニタリング
+## Monitoring
 
 ### CloudWatch Logs
 
-EventBridge Pipeのログは以下で確認できます：
+You can check EventBridge Pipe logs with:
 
 ```bash
 aws logs tail /aws/vendedlogs/pipes/waf-managed-rules-notifier-waf-notification-pipe
@@ -129,46 +130,86 @@ aws logs tail /aws/vendedlogs/pipes/waf-managed-rules-notifier-waf-notification-
 
 ### Dead Letter Queue
 
-失敗したメッセージの確認：
+Check failed messages:
 
 ```bash
 aws sqs receive-message \
   --queue-url https://sqs.us-east-1.amazonaws.com/YOUR_ACCOUNT_ID/waf-managed-rules-notifier-waf-notifications-dlq
 ```
 
-## トラブルシューティング
+## Troubleshooting
 
-### 通知が届かない場合
+### If Notifications Are Not Received
 
-1. SNSサブスクリプションが確認済みか確認
-2. SQSキューにメッセージが到達しているか確認
-3. EventBridge Pipeのログでエラーを確認
-4. Chatbotの設定を確認
+1. Verify SNS subscription is confirmed
+2. Check if messages are reaching the SQS queue
+3. Check EventBridge Pipe logs for errors
+4. Verify Chatbot configuration
 
-### メッセージフォーマットの変更
+### Customizing Message Format
 
-`template.yaml`の`InputTemplate`セクションを編集して、メッセージフォーマットをカスタマイズできます。
+You can customize the message format by editing the `InputTemplate` section in `template.yaml`.
 
-利用可能なフィールド：
-- `$.Subject` - 更新の概要
-- `$.Message` - 更新の詳細内容
-- `$.MessageAttributes.managed_rule_group.Value` - ルールグループ名
-- `$.MessageAttributes.major_version.Value` - バージョン番号
-- `$.Timestamp` - 更新通知のタイムスタンプ
+Available fields:
+- `$.body.Subject` - Update summary
+- `$.body.Message` - Detailed update content
+- `$.body.MessageAttributes.managed_rule_group.Value` - Rule group name
+- `$.body.MessageAttributes.major_version.Value` - Version number
+- `$.body.Timestamp` - Update notification timestamp
 
-## リソースのクリーンアップ
+For details on the AWS Chatbot custom notification schema, refer to the [official documentation](https://docs.aws.amazon.com/chatbot/latest/adminguide/custom-notifs.html).
 
-不要になった場合は、以下のコマンドでリソースを削除できます：
+### Testing Method
+
+You can send a test message to verify functionality:
 
 ```bash
-aws cloudformation delete-stack --stack-name waf-managed-rules-notifier --region us-east-1
+# Create test message
+cat > /tmp/test-message.json << 'EOF'
+{
+  "Type": "Notification",
+  "MessageId": "test-message-12345",
+  "TopicArn": "arn:aws:sns:us-east-1:248400274283:aws-managed-waf-rule-notifications",
+  "Subject": "New version available for rule group AWSManagedRulesCommonRuleSet",
+  "Message": "Welcome to AWSManagedRulesCommonRuleSet version 2.5! This update includes improved protection against SQL injection and XSS attacks.",
+  "Timestamp": "2025-09-30T10:00:00.000Z",
+  "SignatureVersion": "1",
+  "Signature": "EXAMPLE",
+  "SigningCertURL": "https://sns.us-east-1.amazonaws.com/cert.pem",
+  "UnsubscribeURL": "https://sns.us-east-1.amazonaws.com/unsubscribe",
+  "MessageAttributes": {
+    "major_version": {
+      "Type": "String",
+      "Value": "v2"
+    },
+    "managed_rule_group": {
+      "Type": "String",
+      "Value": "AWSManagedRulesCommonRuleSet"
+    }
+  }
+}
+EOF
+
+# Send to SQS queue
+aws sqs send-message \
+  --queue-url $(aws cloudformation describe-stacks --stack-name waf-notifier --query 'Stacks[0].Outputs[?OutputKey==`QueueUrl`].OutputValue' --output text) \
+  --message-body file:///tmp/test-message.json
 ```
 
-## コスト
+## Resource Cleanup
 
-月数回の更新の場合、実質的にコストは発生しません：
+If no longer needed, you can delete resources with the following command.
+Stack name should match what you used during deployment.
 
-- SQS: 最初の100万リクエスト無料
-- EventBridge Pipes: $0.40/100万リクエスト
-- SNS: 最初の100万リクエスト無料
-- CloudWatch Logs: 最初の5GB無料
+```bash
+aws cloudformation delete-stack --stack-name waf-managed-rules-notifier
+```
+
+## Cost
+
+For a few updates per month, costs are essentially negligible:
+
+- SQS: First 1 million requests free
+- EventBridge Pipes: $0.40 per million requests
+- SNS: First 1 million requests free
+- CloudWatch Logs: First 5GB free
