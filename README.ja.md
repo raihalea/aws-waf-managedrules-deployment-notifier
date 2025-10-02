@@ -189,8 +189,9 @@ cat > /tmp/test-message.json << 'EOF'
 EOF
 
 # SQS キューに送信
+# --stack-nameはデプロイ時に設定したものに変更すること
 aws sqs send-message \
-  --queue-url $(aws cloudformation describe-stacks --stack-name waf-notifier --query 'Stacks[0].Outputs[?OutputKey==`QueueUrl`].OutputValue' --output text) \
+  --queue-url $(aws cloudformation describe-stacks --stack-name waf-managed-rules-notifier --query 'Stacks[0].Outputs[?OutputKey==`QueueUrl`].OutputValue' --output text) \
   --message-body file:///tmp/test-message.json
 ```
 
