@@ -212,3 +212,7 @@ aws cloudformation delete-stack --stack-name waf-managed-rules-notifier
 - EventBridge Pipes: $0.40/100万リクエスト
 - SNS: 最初の100万リクエスト無料
 - CloudWatch Logs: 最初の5GB無料
+
+## ライセンス
+
+このプロジェクトはMITライセンスの下でライセンスされています。詳細は[LICENSE](LICENSE)ファイルを参照してください。

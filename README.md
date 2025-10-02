@@ -211,3 +211,7 @@ For a few updates per month, costs are essentially negligible:
 - EventBridge Pipes: $0.40 per million requests
 - SNS: First 1 million requests free
 - CloudWatch Logs: First 5GB free
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
